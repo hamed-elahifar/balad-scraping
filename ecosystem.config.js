@@ -4,5 +4,9 @@ export default {
       name: "balad",
       script: "index.js",
     },
+    {
+      name: "Update Service",
+      script: "update-service.js",
+    },
   ],
 };

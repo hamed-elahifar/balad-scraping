@@ -1,0 +1,10 @@
+{
+  "apps": [
+    {
+      "name": "balad",
+      "path": "/root/balad-scraping"
+    }
+  ],
+  "port": 7777,
+  "password": "Hamed123"
+}
