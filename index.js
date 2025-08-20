@@ -19,7 +19,7 @@ for (let cat of categories) {
       let items = new Set();
       const browser = await puppeteer.launch({
         executablePath: "/usr/bin/google-chrome-stable",
-        headless: false,
+        headless: true,
         args: ["--no-sandbox", "--disable-setuid-sandbox"],
       });
 
