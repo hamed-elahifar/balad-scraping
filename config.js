@@ -1,5 +1,5 @@
 export const dbUrl =
-  "mongodb+srv://hamedelahifar:<db_password>@balad.hj9hctk.mongodb.net/?retryWrites=true&w=majority&appName=balad";
+  "mongodb+srv://hamedelahifar:tJPBDe5NnD5biYlf@cluster0.gdh9gl4.mongodb.net/balad-scraping?retryWrites=true&w=majority";
 
 // export const baseURL = "https://balad.ir/city-tehran/cat-supermarket?page:";
 // export const baseURL =

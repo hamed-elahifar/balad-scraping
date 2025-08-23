@@ -3,6 +3,11 @@ import puppeteer from "puppeteer";
 import fs from "fs";
 import { join } from "path";
 import { baseURL, startPage, categories, cities } from "./config.js";
+import { Url, Item } from "./models.js";
+
+import { mongoDB, mongoDBConnection } from "./mongodb.js";
+
+mongoDBConnection();
 
 const sleepInSeconds = async (seconds) => {
   return new Promise((resolve) => setTimeout(resolve, seconds * 1000));
@@ -29,6 +34,25 @@ async function main() {
       const url = baseURL.replace("{cat}", cat).replace("{city}", city);
 
       for (let currentPage = startPage; currentPage <= 500; currentPage++) {
+        const existingUrl = await Url.findOne({
+          cat,
+          city,
+          page: currentPage,
+          status: { $ne: "Done" },
+        });
+
+        if (existingUrl) {
+          continue;
+        } else {
+          console.info("Scraping page: " + url + currentPage);
+          await Url.create({
+            cat,
+            city,
+            status: "processing",
+            page: currentPage,
+          });
+        }
+
         let noNewItems = false;
         let items = new Set();
         const browser = await puppeteer.launch({
@@ -48,8 +72,8 @@ async function main() {
 
         const scrollableSelector = ".VirtualList_virtualListWrapper__3ufr4";
 
+        // this for loop is to scroll
         for (let i = 0; i < 10; i++) {
-          // this for loop is to scroll
           await page.evaluate((selector) => {
             const element = document.querySelector(selector);
             if (element) {
@@ -80,6 +104,17 @@ async function main() {
 
           if (newItems.length === 0) {
             noNewItems = true; // to brake outer loop
+          } else {
+            const urlDoc = await Url.findOne({
+              cat,
+              city,
+              page: currentPage,
+            });
+
+            if (urlDoc) {
+              urlDoc.status = "done";
+              await urlDoc.save();
+            }
           }
 
           // Process extracted items
@@ -105,6 +140,7 @@ async function main() {
         }
         await browser.close();
 
+        // this will break the current page loop
         if (noNewItems) {
           writeToFile("No new items found, stopping the scraping.");
           break;
@@ -114,4 +150,18 @@ async function main() {
   }
 }
 
-main().catch(console.error);
+mongoDB.connection.once("open", () => {
+  writeToFile(`main started at ${new Date().toISOString()}`);
+  // Ensure connection is ready before starting
+  if (mongoDB.connection.readyState === 1) {
+    console.info("MongoDB is connected and ready");
+    main().catch(console.error);
+  } else {
+    console.error("MongoDB is not ready. Current state:", mongoDB.connection.readyState);
+  }
+});
+
+// Also add a ready event listener as backup
+mongoDB.connection.on("ready", () => {
+  console.info("MongoDB connection is ready");
+});
