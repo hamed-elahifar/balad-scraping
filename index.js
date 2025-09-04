@@ -31,28 +31,35 @@ function writeToFile(logLine) {
 async function main() {
   for (let cat of categories) {
     for (let city of cities) {
-      const url = baseURL.replace("{cat}", cat).replace("{city}", city);
+      let existingUrl;
 
-      for (let currentPage = startPage; currentPage <= 500; currentPage++) {
-        const existingUrl = await Url.findOne({
+      existingUrl = await Url.findOne({
+        cat,
+        city,
+        status: { $ne: "Done" },
+      });
+
+      if (!existingUrl) {
+        await Url.create({
+          type: "cat",
           cat,
           city,
-          page: currentPage,
-          status: { $ne: "Done" },
+          page: 1,
+          status: "in-progress",
         });
+      }
 
-        if (existingUrl) {
-          continue;
-        } else {
-          console.info("Scraping page: " + url + currentPage);
-          await Url.create({
-            cat,
-            city,
-            status: "processing",
-            page: currentPage,
-          });
-        }
+      existingUrl = await Url.findOne({
+        cat,
+        city,
+        status: { $ne: "Done" },
+      });
 
+      // const url = baseURL.replace("{cat}", cat).replace("{city}", city);
+      const { url, page } = existingUrl;
+      // console.log(existingUrl);
+
+      for (let currentPage = page; currentPage <= 500; currentPage++) {
         let noNewItems = false;
         let items = new Set();
         const browser = await puppeteer.launch({
@@ -63,18 +70,17 @@ async function main() {
 
         await sleepInSeconds(1);
 
-        const page = await browser.newPage();
+        const webPage = await browser.newPage();
 
-        writeToFile("Opening page: " + url + currentPage);
-        await page.goto(url + currentPage);
+        await webPage.goto(url);
 
-        await page.setViewport({ width: 1080, height: 1024 });
+        await webPage.setViewport({ width: 1080, height: 1024 });
 
         const scrollableSelector = ".VirtualList_virtualListWrapper__3ufr4";
 
         // this for loop is to scroll
         for (let i = 0; i < 10; i++) {
-          await page.evaluate((selector) => {
+          await webPage.evaluate((selector) => {
             const element = document.querySelector(selector);
             if (element) {
               element.scrollBy(0, window.innerHeight / 2);
@@ -82,7 +88,7 @@ async function main() {
             }
           }, scrollableSelector);
 
-          const newItems = await page.evaluate(() => {
+          const newItems = await webPage.evaluate(() => {
             return Array.from(
               document.querySelectorAll(".BundleItem_item__content__3l8hl")
             ).map((parent) => ({
@@ -104,41 +110,45 @@ async function main() {
 
           if (newItems.length === 0) {
             noNewItems = true; // to brake outer loop
-          } else {
-            const urlDoc = await Url.findOne({
-              cat,
-              city,
-              page: currentPage,
-            });
-
-            if (urlDoc) {
-              urlDoc.status = "done";
-              await urlDoc.save();
-            }
+            existingUrl.status = "Done";
+            await existingUrl.save();
           }
 
           // Process extracted items
-          newItems.forEach((item) => {
+          newItems.forEach(async (item) => {
             if (!items.has(item.title)) {
               items.add(item.title);
 
-              const line = `${item.title},${item.address},${item.website},${item.phone}\n`;
+              await Item.create({
+                title: item.title,
+                address: item.address,
+                website: item.website,
+                phone: item.phone,
+                city,
+                category: cat,
+                url,
+              });
 
-              // if city directory does not exist, create it
-              if (!fs.existsSync("data")) {
-                fs.mkdirSync("data", { recursive: true });
-              }
-              if (!fs.existsSync(join("data", `${city}`))) {
-                fs.mkdirSync(join("data", `${city}`), { recursive: true });
-              }
+              // const line = `${item.title},${item.address},${item.website},${item.phone}\n`;
 
-              fs.appendFileSync(join("data", `${city}`, `${cat}.csv`), line);
+              // // if city directory does not exist, create it
+              // if (!fs.existsSync("data")) {
+              //   fs.mkdirSync("data", { recursive: true });
+              // }
+              // if (!fs.existsSync(join("data", `${city}`))) {
+              //   fs.mkdirSync(join("data", `${city}`), { recursive: true });
+              // }
+
+              // fs.appendFileSync(join("data", `${city}`, `${cat}.csv`), line);
             }
           });
 
           await sleepInSeconds(1);
         }
         await browser.close();
+
+        existingUrl.page = existingUrl.page + 1;
+        await existingUrl.save();
 
         // this will break the current page loop
         if (noNewItems) {
@@ -157,7 +167,10 @@ mongoDB.connection.once("open", () => {
     console.info("MongoDB is connected and ready");
     main().catch(console.error);
   } else {
-    console.error("MongoDB is not ready. Current state:", mongoDB.connection.readyState);
+    console.error(
+      "MongoDB is not ready. Current state:",
+      mongoDB.connection.readyState
+    );
   }
 });
 

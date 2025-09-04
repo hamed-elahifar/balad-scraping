@@ -11,6 +11,7 @@ const itemSchema = new mongoose.Schema({
 });
 
 const urlSchema = new mongoose.Schema({
+  type: String,
   cat: String,
   city: String,
   page: Number,
