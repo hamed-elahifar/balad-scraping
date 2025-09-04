@@ -110,8 +110,6 @@ async function main() {
 
           if (newItems.length === 0) {
             noNewItems = true; // to brake outer loop
-            existingUrl.status = "Done";
-            await existingUrl.save();
           }
 
           // Process extracted items
@@ -152,6 +150,8 @@ async function main() {
 
         // this will break the current page loop
         if (noNewItems) {
+          existingUrl.status = "Done";
+          await existingUrl.save();
           writeToFile("No new items found, stopping the scraping.");
           break;
         }
