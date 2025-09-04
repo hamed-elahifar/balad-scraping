@@ -60,100 +60,105 @@ async function main() {
       // console.log(existingUrl);
 
       for (let currentPage = page; currentPage <= 500; currentPage++) {
-        let noNewItems = false;
-        let items = new Set();
-        const browser = await puppeteer.launch({
-          executablePath: "/usr/bin/google-chrome-stable",
-          headless: true,
-          args: ["--no-sandbox", "--disable-setuid-sandbox"],
-        });
-
-        await sleepInSeconds(1);
-
-        const webPage = await browser.newPage();
-
-        await webPage.goto(url);
-
-        await webPage.setViewport({ width: 1080, height: 1024 });
-
-        const scrollableSelector = ".VirtualList_virtualListWrapper__3ufr4";
-
-        // this for loop is to scroll
-        for (let i = 0; i < 10; i++) {
-          await webPage.evaluate((selector) => {
-            const element = document.querySelector(selector);
-            if (element) {
-              element.scrollBy(0, window.innerHeight / 2);
-              console.log(element.textContent.trim());
-            }
-          }, scrollableSelector);
-
-          const newItems = await webPage.evaluate(() => {
-            return Array.from(
-              document.querySelectorAll(".BundleItem_item__content__3l8hl")
-            ).map((parent) => ({
-              title:
-                parent
-                  .querySelector(".BundleItem_item__name__1DYyY")
-                  ?.textContent.trim() || "N/A",
-              address:
-                parent
-                  .querySelector(".BundleItem_item__subtitle__2a2IA")
-                  ?.textContent.trim() || "N/A",
-              website: parent.querySelector('a[href^="http"]')?.href || "",
-              phone:
-                parent
-                  .querySelector('a[href^="tel"]')
-                  ?.href.replace("tel://", "") || "",
-            }));
-          });
-
-          if (newItems.length === 0) {
-            noNewItems = true; // to brake outer loop
-          }
-
-          // Process extracted items
-          newItems.forEach(async (item) => {
-            if (!items.has(item.title)) {
-              items.add(item.title);
-
-              await Item.create({
-                title: item.title,
-                address: item.address,
-                website: item.website,
-                phone: item.phone,
-                city,
-                category: cat,
-                url,
-              });
-
-              // const line = `${item.title},${item.address},${item.website},${item.phone}\n`;
-
-              // // if city directory does not exist, create it
-              // if (!fs.existsSync("data")) {
-              //   fs.mkdirSync("data", { recursive: true });
-              // }
-              // if (!fs.existsSync(join("data", `${city}`))) {
-              //   fs.mkdirSync(join("data", `${city}`), { recursive: true });
-              // }
-
-              // fs.appendFileSync(join("data", `${city}`, `${cat}.csv`), line);
-            }
+        try {
+          let noNewItems = false;
+          let items = new Set();
+          const browser = await puppeteer.launch({
+            executablePath: "/usr/bin/google-chrome-stable",
+            headless: true,
+            args: ["--no-sandbox", "--disable-setuid-sandbox"],
           });
 
           await sleepInSeconds(1);
-        }
-        await browser.close();
 
-        existingUrl.page = existingUrl.page + 1;
-        await existingUrl.save();
+          const webPage = await browser.newPage();
 
-        // this will break the current page loop
-        if (noNewItems) {
-          existingUrl.status = "Done";
+          await webPage.goto(url);
+          writeToFile(`Start Scrapping: ${url}`);
+
+          await webPage.setViewport({ width: 1080, height: 1024 });
+
+          const scrollableSelector = ".VirtualList_virtualListWrapper__3ufr4";
+
+          // this for loop is to scroll
+          for (let i = 0; i < 10; i++) {
+            await webPage.evaluate((selector) => {
+              const element = document.querySelector(selector);
+              if (element) {
+                element.scrollBy(0, window.innerHeight / 2);
+                console.log(element.textContent.trim());
+              }
+            }, scrollableSelector);
+
+            const newItems = await webPage.evaluate(() => {
+              return Array.from(
+                document.querySelectorAll(".BundleItem_item__content__3l8hl")
+              ).map((parent) => ({
+                title:
+                  parent
+                    .querySelector(".BundleItem_item__name__1DYyY")
+                    ?.textContent.trim() || "N/A",
+                address:
+                  parent
+                    .querySelector(".BundleItem_item__subtitle__2a2IA")
+                    ?.textContent.trim() || "N/A",
+                website: parent.querySelector('a[href^="http"]')?.href || "",
+                phone:
+                  parent
+                    .querySelector('a[href^="tel"]')
+                    ?.href.replace("tel://", "") || "",
+              }));
+            });
+
+            if (newItems.length === 0) {
+              noNewItems = true; // to brake outer loop
+            }
+
+            // Process extracted items
+            newItems.forEach(async (item) => {
+              if (!items.has(item.title)) {
+                items.add(item.title);
+
+                await Item.create({
+                  title: item.title,
+                  address: item.address,
+                  website: item.website,
+                  phone: item.phone,
+                  city,
+                  category: cat,
+                  url,
+                });
+
+                // const line = `${item.title},${item.address},${item.website},${item.phone}\n`;
+
+                // // if city directory does not exist, create it
+                // if (!fs.existsSync("data")) {
+                //   fs.mkdirSync("data", { recursive: true });
+                // }
+                // if (!fs.existsSync(join("data", `${city}`))) {
+                //   fs.mkdirSync(join("data", `${city}`), { recursive: true });
+                // }
+
+                // fs.appendFileSync(join("data", `${city}`, `${cat}.csv`), line);
+              }
+            });
+
+            await sleepInSeconds(1);
+          }
+          await browser.close();
+
+          existingUrl.page = existingUrl.page + 1;
           await existingUrl.save();
-          writeToFile("No new items found, stopping the scraping.");
-          break;
+
+          // this will break the current page loop
+          if (noNewItems) {
+            existingUrl.status = "Done";
+            await existingUrl.save();
+            writeToFile("No new items found, stopping the scraping.");
+            break;
+          }
+        } catch (error) {
+          process.exit();
         }
       }
     }
