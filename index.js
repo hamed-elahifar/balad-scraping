@@ -2,7 +2,7 @@ console.clear();
 import puppeteer from "puppeteer";
 import fs from "fs";
 import { join } from "path";
-import { baseURL, startPage, categories, cities } from "./config.js";
+import { categories, cities } from "./config.js";
 import { Url, Item } from "./models.js";
 
 import { mongoDB, mongoDBConnection } from "./mongodb.js";
@@ -29,18 +29,15 @@ function writeToFile(logLine) {
 }
 
 async function main() {
-  for (let cat of categories) {
-    for (let city of cities) {
-      let existingUrl;
-
-      existingUrl = await Url.findOne({
+  categoryloop: for (let cat of categories) {
+    cityLoop: for (let city of cities) {
+      let existingUrl = await Url.findone({
         cat,
         city,
-        status: { $ne: "Done" },
       });
 
       if (!existingUrl) {
-        await Url.create({
+        existingUrl = await Url.create({
           type: "cat",
           cat,
           city,
@@ -49,20 +46,28 @@ async function main() {
         });
       }
 
-      existingUrl = await Url.findOne({
-        cat,
-        city,
-        status: { $ne: "Done" },
-      });
+      if (existingUrl.status === "done") {
+        continue cityLoop;
+      }
+
+      if (existingUrl.page >= 500) {
+        continue cityLoop;
+      }
+
+      const { url, page } = existingUrl;
 
       // const url = baseURL.replace("{cat}", cat).replace("{city}", city);
-      const { url, page } = existingUrl;
       // console.log(existingUrl);
 
-      for (let currentPage = page; currentPage <= 500; currentPage++) {
+      pageLoop: for (
+        let currentPage = page;
+        currentPage <= 500;
+        currentPage++
+      ) {
         try {
           let noNewItems = false;
           let items = new Set();
+
           const browser = await puppeteer.launch({
             executablePath: "/usr/bin/google-chrome-stable",
             headless: true,
@@ -124,9 +129,9 @@ async function main() {
                   address: item.address,
                   website: item.website,
                   phone: item.phone,
-                  city,
                   category: cat,
-                  url,
+                  city,
+                  url: `https://balad.ir/city-${city}/cat-${cat}?page=${currentPage}`,
                 });
 
                 // const line = `${item.title},${item.address},${item.website},${item.phone}\n`;
@@ -147,22 +152,22 @@ async function main() {
           }
           await browser.close();
 
-          existingUrl.page = existingUrl.page + 1;
-          await existingUrl.save();
-
           // this will break the current page loop
           if (noNewItems) {
-            existingUrl.status = "Done";
+            existingUrl.status = "done";
             await existingUrl.save();
             writeToFile("No new items found, stopping the scraping.");
-            break;
+            break pageLoop;
+          } else {
+            existingUrl.page = currentPage;
+            await existingUrl.save();
           }
         } catch (error) {
           process.exit();
         }
       }
-    }
-  }
+    } // loop city
+  } // loop cat
 }
 
 mongoDB.connection.once("open", () => {
