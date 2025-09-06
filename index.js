@@ -31,7 +31,7 @@ function writeToFile(logLine) {
 async function main() {
   categoryloop: for (let cat of categories) {
     cityLoop: for (let city of cities) {
-      let existingUrl = await Url.findone({
+      let existingUrl = await Url.findOne({
         cat,
         city,
       });
