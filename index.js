@@ -159,7 +159,7 @@ async function main() {
             writeToFile("No new items found, stopping the scraping.");
             break pageLoop;
           } else {
-            existingUrl.page = currentPage;
+            existingUrl.page = currentPage + 1;
             await existingUrl.save();
           }
         } catch (error) {
