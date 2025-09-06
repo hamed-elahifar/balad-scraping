@@ -46,25 +46,18 @@ async function main() {
         });
       }
 
-      if (existingUrl.status === "done") {
+      if (existingUrl.status === "done" || existingUrl.page >= 500) {
         continue cityLoop;
       }
-
-      if (existingUrl.page >= 500) {
-        continue cityLoop;
-      }
-
-      const { url, page } = existingUrl;
-
-      // const url = baseURL.replace("{cat}", cat).replace("{city}", city);
-      // console.log(existingUrl);
 
       pageLoop: for (
-        let currentPage = page;
+        let currentPage = existingUrl.page;
         currentPage <= 500;
         currentPage++
       ) {
         try {
+          let url = `https://balad.ir/city-${city}/cat-${cat}?page=${currentPage}`;
+
           let noNewItems = false;
           let items = new Set();
 
@@ -159,7 +152,7 @@ async function main() {
             writeToFile("No new items found, stopping the scraping.");
             break pageLoop;
           } else {
-            // there was some items
+            // there was some items,
             existingUrl.page = currentPage + 1;
             await existingUrl.save();
           }
